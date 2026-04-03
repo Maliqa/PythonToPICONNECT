@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OPC DA Simulator — PI System Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700&family=Barlow+Condensed:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #080c10;
+    --bg2:       #0d1318;
+    --grid:      rgba(0,200,255,0.04);
+    --border:    rgba(0,200,255,0.15);
+    --accent:    #00c8ff;
+    --accent2:   #00ff9d;
+    --accent3:   #ff6b35;
+    --warn:      #ffd700;
+    --text:      #c8dde8;
+    --muted:     #4a6478;
+    --glow:      rgba(0,200,255,0.3);
+    --glow2:     rgba(0,255,157,0.25);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Barlow', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Radial glow */
+  body::after {
+    content: '';
+    position: fixed;
+    top: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 900px;
+    height: 600px;
+    background: radial-gradient(ellipse, rgba(0,200,255,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 32px 80px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    text-align: center;
+    margin-bottom: 64px;
+    animation: fadeDown 0.8s ease both;
+  }
+
+  .eyebrow {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    opacity: 0.8;
+  }
+
+  h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: clamp(32px, 5vw, 56px);
+    font-weight: 900;
+    letter-spacing: -1px;
+    line-height: 1.05;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+
+  h1 span { color: var(--accent); }
+
+  .subtitle {
+    font-size: 15px;
+    color: var(--muted);
+    font-weight: 300;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── DIAGRAM ── */
+  .diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    align-items: center;
+  }
+
+  /* Layer */
+  .layer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    animation: fadeUp 0.7s ease both;
+  }
+
+  .layer:nth-child(1) { animation-delay: 0.1s; }
+  .layer:nth-child(2) { animation-delay: 0.2s; }
+  .layer:nth-child(3) { animation-delay: 0.3s; }
+  .layer:nth-child(4) { animation-delay: 0.4s; }
+  .layer:nth-child(5) { animation-delay: 0.5s; }
+  .layer:nth-child(6) { animation-delay: 0.6s; }
+  .layer:nth-child(7) { animation-delay: 0.7s; }
+
+  /* Node card */
+  .node {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 28px;
+    width: 100%;
+    max-width: 680px;
+    position: relative;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    cursor: default;
+  }
+
+  .node:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 24px var(--glow), inset 0 0 24px rgba(0,200,255,0.03);
+  }
+
+  .node.green:hover {
+    border-color: var(--accent2);
+    box-shadow: 0 0 24px var(--glow2), inset 0 0 24px rgba(0,255,157,0.03);
+  }
+
+  .node.orange:hover {
+    border-color: var(--accent3);
+    box-shadow: 0 0 24px rgba(255,107,53,0.3);
+  }
+
+  .node.yellow:hover {
+    border-color: var(--warn);
+    box-shadow: 0 0 24px rgba(255,215,0,0.25);
+  }
+
+  /* Node header */
+  .node-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .node-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    background: rgba(0,200,255,0.1);
+    border: 1px solid rgba(0,200,255,0.2);
+  }
+
+  .node.green .node-icon { background: rgba(0,255,157,0.1); border-color: rgba(0,255,157,0.2); }
+  .node.orange .node-icon { background: rgba(255,107,53,0.1); border-color: rgba(255,107,53,0.2); }
+  .node.yellow .node-icon { background: rgba(255,215,0,0.1); border-color: rgba(255,215,0,0.2); }
+
+  .node-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.3px;
+  }
+
+  .node-badge {
+    margin-left: auto;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(0,200,255,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(0,200,255,0.2);
+    white-space: nowrap;
+  }
+
+  .node.green .node-badge { background: rgba(0,255,157,0.1); color: var(--accent2); border-color: rgba(0,255,157,0.2); }
+  .node.orange .node-badge { background: rgba(255,107,53,0.1); color: var(--accent3); border-color: rgba(255,107,53,0.2); }
+  .node.yellow .node-badge { background: rgba(255,215,0,0.1); color: var(--warn); border-color: rgba(255,215,0,0.2); }
+
+  .node-desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+    padding-left: 48px;
+  }
+
+  /* Tag pills */
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-left: 48px;
+    margin-top: 10px;
+  }
+
+  .tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #8ab;
+    letter-spacing: 0.5px;
+  }
+
+  /* Arrow connector */
+  .arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 0;
+    gap: 0;
+    width: 100%;
+    max-width: 680px;
+  }
+
+  .arrow-line {
+    width: 2px;
+    height: 28px;
+    background: linear-gradient(to bottom, var(--border), rgba(0,200,255,0.4));
+    position: relative;
+  }
+
+  .arrow-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    opacity: 0.6;
+    margin: 2px 0;
+  }
+
+  .arrow-head {
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid rgba(0,200,255,0.5);
+  }
+
+  /* Three-column asset row */
+  .asset-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    width: 100%;
+    max-width: 680px;
+    animation: fadeUp 0.7s ease 0.35s both;
+  }
+
+  .asset-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .asset-card:hover {
+    border-color: var(--accent2);
+    box-shadow: 0 0 20px var(--glow2);
+  }
+
+  .asset-card-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent2);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .asset-card-title span { font-size: 16px; }
+
+  .asset-attr {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    letter-spacing: 0.3px;
+  }
+
+  .asset-attr:last-child { border-bottom: none; }
+
+  .attr-unit {
+    color: rgba(0,200,255,0.5);
+    font-size: 9px;
+  }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 48px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+    animation: fadeUp 0.7s ease 0.8s both;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  /* ── STATS BAR ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 48px;
+    animation: fadeUp 0.7s ease 0.15s both;
+  }
+
+  .stat {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 32px;
+    font-weight: 900;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Pulse dot */
+  .pulse {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 0 0 rgba(0,255,157,0.6);
+    animation: pulse 2s infinite;
+    margin-right: 6px;
+  }
+
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(0,255,157,0.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(0,255,157,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,255,157,0); }
+  }
+
+  /* Scan line animation on hover */
+  .node::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 8px;
+    background: linear-gradient(to bottom, rgba(0,200,255,0.03) 0%, transparent 50%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .node:hover::after { opacity: 1; }
+
+  @media (max-width: 600px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .asset-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <header>
+    <div class="eyebrow">// PISRVCISDEMO &nbsp;·&nbsp; Architecture Overview &nbsp;·&nbsp; v1.0</div>
+    <h1>OPC DA <span>Simulator</span><br>PI System Pipeline</h1>
+    <p class="subtitle">Python → PIconnect → PI Data Archive → PI AF → PI Vision</p>
+  </header>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-value">9</div>
+      <div class="stat-label">PI Tags</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">3</div>
+      <div class="stat-label">Assets</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">5s</div>
+      <div class="stat-label">Interval</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value"><span class="pulse"></span>Live</div>
+      <div class="stat-label">Status</div>
+    </div>
+  </div>
+
+  <!-- Diagram -->
+  <div class="diagram">
+
+    <!-- Layer 1: Streamlit -->
+    <div class="layer">
+      <div class="node orange">
+        <div class="node-header">
+          <div class="node-icon">🖥️</div>
+          <div class="node-title">Streamlit App</div>
+          <div class="node-badge">LAYER 1 · SOURCE</div>
+        </div>
+        <div class="node-desc">
+          OPC DA Simulator Dashboard — generate fake DCS data (Vibration, Temperature, Pressure)
+          dengan pola sinusoidal + Gaussian noise + random bearing fault spike.
+          Berjalan di <strong style="color:#fff">Windows localhost:8501</strong>.
+        </div>
+        <div class="tag-row">
+          <span class="tag">streamlit_app.py</span>
+          <span class="tag">Python 3.11.9</span>
+          <span class="tag">plotly</span>
+          <span class="tag">math + random</span>
+          <span class="tag">localhost:8501</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow 1 -->
+    <div class="layer">
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">PIconnect · PI SDK · COM/.NET</div>
+        <div class="arrow-head"></div>
+      </div>
+    </div>
+
+    <!-- Layer 2: PIconnect -->
+    <div class="layer">
+      <div class="node">
+        <div class="node-header">
+          <div class="node-icon">🔗</div>
+          <div class="node-title">PIconnect + AF SDK</div>
+          <div class="node-badge">LAYER 2 · BRIDGE</div>
+        </div>
+        <div class="node-desc">
+          Python library yang wrap OSIsoft AF SDK via pythonnet (CLR).
+          Menangani koneksi ke PI Server, resolve WebID/PIPoint, dan write value ke archive.
+        </div>
+        <div class="tag-row">
+          <span class="tag">PIconnect 0.12.4</span>
+          <span class="tag">pythonnet 3.0.5</span>
+          <span class="tag">OSIsoft.AFSDK.dll</span>
+          <span class="tag">AF SDK 2.10.11.2717</span>
+          <span class="tag">clr · System.Collections</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow 2 -->
+    <div class="layer">
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">PI SDK · write value · update_value()</div>
+        <div class="arrow-head"></div>
+      </div>
+    </div>
+
+    <!-- Layer 3: PI Data Archive -->
+    <div class="layer">
+      <div class="node">
+        <div class="node-header">
+          <div class="node-icon">🗄️</div>
+          <div class="node-title">PI Data Archive</div>
+          <div class="node-badge">LAYER 3 · HISTORIAN</div>
+        </div>
+        <div class="node-desc">
+          Core time-series historian. Menyimpan semua nilai tag dengan timestamp presisi tinggi.
+          Server: <strong style="color:#fff">\\PISRVCISDEMO</strong> · 9 PI Tags aktif.
+        </div>
+        <div class="tag-row">
+          <span class="tag">DEMO.COMP01.VIB.RMS</span>
+          <span class="tag">DEMO.COMP01.TEMP</span>
+          <span class="tag">DEMO.COMP01.PRESS</span>
+          <span class="tag">DEMO.PUMP01.VIB.RMS</span>
+          <span class="tag">DEMO.PUMP01.TEMP</span>
+          <span class="tag">DEMO.PUMP01.PRESS</span>
+          <span class="tag">DEMO.MTR01.VIB.RMS</span>
+          <span class="tag">DEMO.MTR01.TEMP</span>
+          <span class="tag">DEMO.MTR01.CURR</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow 3 -->
+    <div class="layer">
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">PI Point Data Reference · AF SDK</div>
+        <div class="arrow-head"></div>
+      </div>
+    </div>
+
+    <!-- Layer 4: PI AF -->
+    <div class="layer">
+      <div class="node green">
+        <div class="node-header">
+          <div class="node-icon">🌿</div>
+          <div class="node-title">PI Asset Framework (AF)</div>
+          <div class="node-badge">LAYER 4 · CONTEXT</div>
+        </div>
+        <div class="node-desc">
+          Asset hierarchy yang memberikan konteks engineering pada raw PI Tags.
+          Database: <strong style="color:#fff">DEMO_PLANT</strong> di PISRVCISDEMO.
+        </div>
+      </div>
+    </div>
+
+    <!-- Asset row -->
+    <div class="asset-row">
+      <div class="asset-card">
+        <div class="asset-card-title"><span>🔵</span> Compressor-01</div>
+        <div class="asset-attr"><span>Vibration RMS</span><span class="attr-unit">mm/s</span></div>
+        <div class="asset-attr"><span>Temperature</span><span class="attr-unit">°C</span></div>
+        <div class="asset-attr"><span>Suction Pressure</span><span class="attr-unit">bar</span></div>
+      </div>
+      <div class="asset-card">
+        <div class="asset-card-title"><span>🟢</span> Pump-01</div>
+        <div class="asset-attr"><span>Vibration RMS</span><span class="attr-unit">mm/s</span></div>
+        <div class="asset-attr"><span>Bearing Temp</span><span class="attr-unit">°C</span></div>
+        <div class="asset-attr"><span>Discharge Press</span><span class="attr-unit">bar</span></div>
+      </div>
+      <div class="asset-card">
+        <div class="asset-card-title"><span>🟡</span> Motor-01</div>
+        <div class="asset-attr"><span>Vibration RMS</span><span class="attr-unit">mm/s</span></div>
+        <div class="asset-attr"><span>Winding Temp</span><span class="attr-unit">°C</span></div>
+        <div class="asset-attr"><span>Current</span><span class="attr-unit">A</span></div>
+      </div>
+    </div>
+
+    <!-- Arrow 4 -->
+    <div class="layer">
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">AF Asset · attribute browse · real-time</div>
+        <div class="arrow-head"></div>
+      </div>
+    </div>
+
+    <!-- Layer 5: PI Vision -->
+    <div class="layer">
+      <div class="node yellow">
+        <div class="node-header">
+          <div class="node-icon">📊</div>
+          <div class="node-title">PI Vision</div>
+          <div class="node-badge">LAYER 5 · VISUALIZATION</div>
+        </div>
+        <div class="node-desc">
+          Web-based visualization — konsumsi data dari PI AF hierarchy secara real-time.
+          Drag & drop attribute ke canvas untuk membuat trend, gauge, dan value display.
+          URL: <strong style="color:#fff">http://localhost/PIVision</strong>
+        </div>
+        <div class="tag-row">
+          <span class="tag">localhost/PIVision</span>
+          <span class="tag">Trend Chart</span>
+          <span class="tag">Gauge</span>
+          <span class="tag">Value Display</span>
+          <span class="tag">Real-time</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /diagram -->
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:var(--accent3)"></div>
+      Data Source Layer
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:var(--accent)"></div>
+      Bridge / Archive Layer
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:var(--accent2)"></div>
+      Context / AF Layer
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:var(--warn)"></div>
+      Visualization Layer
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:var(--muted)"></div>
+      PISRVCISDEMO · Windows 10
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
